@@ -1,0 +1,37 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email == 'admin@example.com';
+    }
+
+    // Public registration: only create, with basic field validation.
+    // Directory reads and all employee edits/deletions require the admin account.
+    match /employees/{employeeId} {
+      allow create: if request.resource.data.keys().hasAll([
+        'employeeId','firstName','lastName','email','phone','department',
+        'designation','employmentType','joiningDate','location','createdAt','updatedAt'
+      ])
+      && request.resource.data.firstName is string
+      && request.resource.data.lastName is string
+      && request.resource.data.email is string
+      && request.resource.data.email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]{2,}$')
+      && request.resource.data.phone is string
+      && request.resource.data.phone.matches('^[6-9][0-9]{9}$');
+      allow read, update, delete: if isAdmin();
+    }
+
+    // Index documents contain only a pointer, not personal information.
+    // Public read allows duplicate checks; create is restricted to registration transactions.
+    match /uniqueEmails/{key} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['employeeDoc']) && request.resource.data.employeeDoc is string;
+      allow update, delete: if isAdmin();
+    }
+    match /uniquePhones/{key} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasOnly(['employeeDoc']) && request.resource.data.employeeDoc is string;
+      allow update, delete: if isAdmin();
+    }
+  }
+}
